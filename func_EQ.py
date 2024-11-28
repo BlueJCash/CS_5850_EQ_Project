@@ -104,7 +104,7 @@ def plot_3d_clusters(locs, labels, city, max_depth, elev, azim):
     ax.set_ylabel('Latitude')
     ax.set_zlabel('Depth (km)')
 
-    ax.set_title(f'Hierarchical Clustering of Earthquake Locations for {city} (Longitude, Depth, Latitude)')
+    ax.set_title(f'Hierarchical Clustering of Earthquake Locations for {city} (Latitude, Longitude, Depth)')
     ax.legend()
 
     ax.view_init(elev=elev, azim=azim)
@@ -167,7 +167,7 @@ def show_progression(city="Challis, ID", maxradius=1, elev=0, azim=90):
             ax.set_ylabel('Latitude')
             ax.set_zlabel('Depth (km)')
 
-            ax.set_title(f"""Hierarchical Clustering of Earthquake Locations for {city} (Longitude, Depth, Latitude) 
+            ax.set_title(f"""Hierarchical Clustering of Earthquake Locations for {city} (Latitude, Longitude, Depth) 
                          \nbetween {time_range_str}""")
             ax.legend()
 
