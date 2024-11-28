@@ -49,12 +49,18 @@ def process_earthquake_data(catalog):
         for event in catalog:
             temp = event.origins[0]
             if temp.longitude is not None and temp.latitude is not None and temp.depth is not None:
-                location = [temp.longitude, temp.latitude, temp.depth]  
+                location = [temp.longitude, temp.latitude, temp.depth, temp.time]  
                 locs.append(location)
-                print(f"Event Time: {temp.time}, Magnitude: {event.magnitudes[0].mag}")
-                print(location)
+                #print(f"Event Time: {temp.time}, Magnitude: {event.magnitudes[0].mag}")
+                #print(location)
         max_depth = max(locs, key=lambda x: x[2])[2]
-    return np.array(locs), max_depth
+
+        locs = np.array(locs)
+        locs = locs[locs[:, 3].argsort()]
+        
+        return locs, max_depth
+    else:
+        return None
     
 def normalize_depth(locs):
     """Normalize the depth values."""
@@ -111,10 +117,62 @@ def perform_Seismitc_Analysis(city="Challis, ID", maxradius=1, elev=0, azim=90):
     if catalog:
         locs, max_depth = process_earthquake_data(catalog)
         locs = normalize_depth(locs)
-    
+        
+        linked = perform_clustering(locs)
+        k = plot_dendrogram(linked)
+        labels = perform_labeling(linked, k)
 
-    linked = perform_clustering(locs)
-    k = plot_dendrogram(linked)
-    labels = perform_labeling(linked, k)
+        plot_3d_clusters(locs, labels, city, max_depth, elev=elev, azim=azim)
+    else:
+        return None
 
-    plot_3d_clusters(locs, labels, city, max_depth, elev=elev, azim=azim)
+
+def split_by_date(locs, num_splits=6):
+    """Splits the data into equals sections"""
+    splits = np.array_split(locs, num_splits)
+    return splits
+
+def show_progression(city="Challis, ID", maxradius=1, elev=0, azim=90):
+    client = Client("USGS")
+    catalog = get_earthquake_data(client=client, city=city, maxradius=maxradius)
+    if catalog:
+        locs, max_depth = process_earthquake_data(catalog)
+        locs = normalize_depth(locs)
+        
+        split_locs = split_by_date(locs,6)
+        
+        lat, lon = get_geolocation(city=city)
+
+        
+        # Create a 3D plot for each split
+        for i, split in enumerate(split_locs):
+            
+            
+            start_time = split[0, 3]
+            end_time = split[-1, 3]
+            
+            # Get Time range of each split
+            start_time_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
+            end_time_str = end_time.strftime('%Y-%m-%d %H:%M:%S')
+            time_range_str = f"{start_time_str} to {end_time_str}"
+            
+            fig = plt.figure(figsize=(10, 8))
+            ax = fig.add_subplot(111, projection='3d')
+            scatter = ax.scatter(split[:, 0], split[:, 1], split[:, 2] * max_depth, 
+                                 label=f'Events', marker='o')
+        
+            ax.scatter(lon, lat, 0, c='black', marker='*', s=200, label='City')
+
+            ax.set_xlabel('Longitude')
+            ax.set_ylabel('Latitude')
+            ax.set_zlabel('Depth (km)')
+
+            ax.set_title(f"""Hierarchical Clustering of Earthquake Locations for {city} (Longitude, Depth, Latitude) 
+                         \nbetween {time_range_str}""")
+            ax.legend()
+
+            ax.view_init(elev=elev, azim=azim)
+
+            plt.show()
+    else:
+        return None
