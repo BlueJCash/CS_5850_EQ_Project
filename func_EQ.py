@@ -1,11 +1,14 @@
 from obspy.clients.fdsn import Client
 from geopy.geocoders import Nominatim
-from geopy.distance import geodesic
 from sklearn.preprocessing import MinMaxScaler
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D  # Import for 3D plotting
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+import warnings
 
 
 def get_geolocation(city="Challis, ID"):
@@ -21,6 +24,7 @@ def get_geolocation(city="Challis, ID"):
     except Exception as e:
         print(f"Error fetching geolocation for {city}: {e}")
         return None
+
 
 def get_earthquake_data(client="USGS", city="Challis, ID", maxradius=1, starttime="1900-10-01", endtime="2024-10-11", minmagnitude=2.5):
     """Fetch earthquake events around a city."""
@@ -41,7 +45,8 @@ def get_earthquake_data(client="USGS", city="Challis, ID", maxradius=1, starttim
     except Exception as e:
         print(f"Error fetching events: {e}")
         return None
-    
+
+
 def process_earthquake_data(catalog):
     """Process the fetched earthquake events and extract location information."""
     locs = []
@@ -49,10 +54,8 @@ def process_earthquake_data(catalog):
         for event in catalog:
             temp = event.origins[0]
             if temp.longitude is not None and temp.latitude is not None and temp.depth is not None:
-                location = [temp.longitude, temp.latitude, temp.depth, temp.time]  
+                location = [temp.longitude, temp.latitude, temp.depth, temp.time, event.magnitudes[0].mag]  
                 locs.append(location)
-                #print(f"Event Time: {temp.time}, Magnitude: {event.magnitudes[0].mag}")
-                #print(location)
         max_depth = max(locs, key=lambda x: x[2])[2]
 
         locs = np.array(locs)
@@ -61,21 +64,26 @@ def process_earthquake_data(catalog):
         return locs, max_depth
     else:
         return None
-    
+
+
 def normalize_depth(locs):
     """Normalize the depth values."""
     scaler = MinMaxScaler()
     locs[:, 2] = -scaler.fit_transform(locs[:, 2].reshape(-1, 1)).flatten()
     return locs
 
+
 def perform_clustering(locs):
     """Perform hierarchical clustering on earthquake locations."""
     linked = linkage(locs, method='ward')
     return linked
 
+
 def perform_labeling(linked, k):
+    """Assign labels to clusters."""
     labels = fcluster(linked, k, criterion='maxclust')
     return labels
+
 
 def plot_dendrogram(linked):
     """Plot the hierarchical clustering dendrogram."""
@@ -91,88 +99,119 @@ def plot_dendrogram(linked):
     
     return num_colors - 1
 
+
 def plot_3d_clusters(locs, labels, city, max_depth, elev, azim):
     """Plot the 3D scatter plot of earthquake locations and clusters."""
     fig = plt.figure(figsize=(10,8))
     lat, lon = get_geolocation(city=city)
 
     ax = fig.add_subplot(111, projection='3d')
-    scatter = ax.scatter(locs[:, 0], locs[:, 1], locs[:, 2]*max_depth, c=labels, cmap='viridis', marker='o', label='Events')
+    scatter = ax.scatter(locs[:, 0], locs[:, 1], locs[:, 2]*max_depth, c=labels, cmap='jet', marker='o', label='Events')
     ax.scatter(lon, lat, 0, c='black', marker='*', s=200, label='City')
 
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
     ax.set_zlabel('Depth (km)')
 
-    ax.set_title(f'Hierarchical Clustering of Earthquake Locations for {city} (Latitude, Longitude, Depth)')
+    ax.set_title(f'Hierarchical Clustering of Earthquake Locations for {city} (Latitude, Longitude, Depth) ')
     ax.legend()
 
     ax.view_init(elev=elev, azim=azim)
 
     plt.show()
 
-def perform_Seismitc_Analysis(city="Challis, ID", maxradius=1, elev=0, azim=90):   
-    client = Client("USGS")
-    catalog = get_earthquake_data(client=client, city=city, maxradius=maxradius)
-    if catalog:
-        locs, max_depth = process_earthquake_data(catalog)
-        locs = normalize_depth(locs)
-        
-        linked = perform_clustering(locs)
-        k = plot_dendrogram(linked)
-        labels = perform_labeling(linked, k)
 
-        plot_3d_clusters(locs, labels, city, max_depth, elev=elev, azim=azim)
-    else:
-        return None
+def predict_Seismic_RF(city, locs, duration=30, freq='YE'):
+    """Predict the number of earthquake events in a future/Past time span using Random Forest."""
+    
+    event_times = [time.datetime for time in locs[:, 3]] # Convert to datetime
+    
+    event_counts = pd.Series(1, index=pd.to_datetime(event_times)).resample(freq).count() # Count number of events per freq
+    
+    event_counts_df = pd.DataFrame(event_counts)
+    event_counts_df['year'] = event_counts_df.index.year
+    event_counts_df['month'] = event_counts_df.index.month
+    event_counts_df['day'] = event_counts_df.index.day
+    
+    X = event_counts_df[['year', 'month', 'day']]
+    y = event_counts_df[0]
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+    rf_model.fit(X_train, y_train)
+    
+    future_dates = pd.date_range(event_counts.index[-1], periods=duration+1, freq=freq)[1:]
+    future_features = pd.DataFrame({
+        'year': future_dates.year,
+        'month': future_dates.month,
+        'day': future_dates.day
+    })
+    
+    forecast = rf_model.predict(future_features)
+    
+    past_dates = pd.date_range(event_counts.index[0] - pd.DateOffset(years=duration), periods=duration+1, freq=freq)[1:]
+    backcast_features = pd.DataFrame({
+        'year': past_dates.year,
+        'month': past_dates.month,
+        'day': past_dates.day
+    })
+    backcast = rf_model.predict(backcast_features)
+    
+    plt.figure(figsize=(10, 8))
+    plt.plot(event_counts.index, event_counts, label='Historical Data', color='blue')  # Historical data plot
+    plt.plot(future_dates, forecast, label='Forecasted Data', color='red')  # Forecast data plot
+    plt.plot(past_dates, backcast, label='Backcasted Data', color='green')
+    plt.title(f'Event Count Forecast for {city} using RF')
+    plt.xlabel('Date')
+    plt.ylabel('Event Count')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+    
+    # For Readability
+    print(f"\nPredicted Number of Events for {city} in the prior {duration} {freq}s:")
+    for date, count in zip(past_dates, backcast):
+        print(f"{date.strftime('%Y-%m-%d')}    {count:.2f}")
+    print(f"Predicted Number of Events for {city} in the next {duration} {freq}s:")
+    for date, count in zip(future_dates, forecast):
+        print(f"{date.strftime('%Y-%m-%d')}    {count:.2f}")
 
 
-def split_by_date(locs, num_splits=6):
-    """Splits the data into equals sections"""
-    splits = np.array_split(locs, num_splits)
-    return splits
-
-def show_progression(city="Challis, ID", maxradius=1, elev=0, azim=90):
-    client = Client("USGS")
-    catalog = get_earthquake_data(client=client, city=city, maxradius=maxradius)
-    if catalog:
-        locs, max_depth = process_earthquake_data(catalog)
-        locs = normalize_depth(locs)
-        
-        split_locs = split_by_date(locs,6)
-        
-        lat, lon = get_geolocation(city=city)
-
-        
-        # Create a 3D plot for each split
-        for i, split in enumerate(split_locs):
-            
-            
-            start_time = split[0, 3]
-            end_time = split[-1, 3]
-            
-            # Get Time range of each split
-            start_time_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
-            end_time_str = end_time.strftime('%Y-%m-%d %H:%M:%S')
-            time_range_str = f"{start_time_str} to {end_time_str}"
-            
-            fig = plt.figure(figsize=(10, 8))
-            ax = fig.add_subplot(111, projection='3d')
-            scatter = ax.scatter(split[:, 0], split[:, 1], split[:, 2] * max_depth, 
-                                 label=f'Events', marker='o')
-        
-            ax.scatter(lon, lat, 0, c='black', marker='*', s=200, label='City')
-
-            ax.set_xlabel('Longitude')
-            ax.set_ylabel('Latitude')
-            ax.set_zlabel('Depth (km)')
-
-            ax.set_title(f"""Hierarchical Clustering of Earthquake Locations for {city} (Latitude, Longitude, Depth) 
-                         \nbetween {time_range_str}""")
-            ax.legend()
-
-            ax.view_init(elev=elev, azim=azim)
-
-            plt.show()
-    else:
-        return None
+def predict_Seismic_ARIMA(city, locs, duration=30, freq='YE'):
+    """Predict the number of earthquake events in a future time span using ARIMA."""
+    
+    event_times = [time.datetime for time in locs[:, 3]] # Convert to datetime
+    
+    event_counts = pd.Series(1, index=pd.to_datetime(event_times)).resample(freq).count() # Count number of events per freq
+    
+    event_counts_reversed = event_counts[::-1] # For Backcasting
+    
+    warnings.filterwarnings("ignore") # Warning caused by performing back prediction and non-stationary
+    model = ARIMA(event_counts, order=(5, 1, 0)) # Create ARIMA model
+    model_fit = model.fit()
+    forecast = model_fit.forecast(steps=duration) # Create forecast
+    future_dates = pd.date_range(event_counts.index[-1], periods=duration+1, freq=freq)[1:] # Starting at end of historical data
+    
+    model = ARIMA(event_counts_reversed, order=(5, 1, 0)) # Create ARIMA model
+    model_fit = model.fit()
+    backcast = model_fit.forecast(steps=duration) # Create backcast 
+    past_dates = pd.date_range(event_counts.index[0] - pd.DateOffset(years=duration), periods=duration+1, freq=freq)[1:]
+    warnings.filterwarnings("default")
+    
+    forecast[forecast < 0] = 0
+    backcast[backcast < 0] = 0
+    
+    plt.figure(figsize=(10, 8))
+    plt.plot(event_counts.index, event_counts, label='Historical Data', color='blue')  # Historical data plot
+    plt.plot(future_dates, forecast, label='Forecasted Data', color='red')  # Forecast data plot
+    plt.plot(past_dates, backcast, label='Backcasted Data', color='green')
+    plt.title(f'Event Count Forecast for {city} using ARIMA')
+    plt.xlabel('Date')
+    plt.ylabel('Event Count')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+    
+    # For Readability
+    print(f"\nPredicted Number of Events for {city}")
