@@ -1,4 +1,5 @@
 # Small Seismic Event Analysis Project
+By Thomas Prouty
 
 ## Overview
 The goal of the project was to investigate the effectiveness of different visualization and prediction methods for displaying and understanding historical seismic data. This project provides tools for performing seismic analysis, visualization, clustering, and predictions for earthquake data. Specifically, the code supports hierarchical clustering, heatmap visualization, k-means clustering, and forecasting/backcasting using Random Forests and ARIMA models. 
