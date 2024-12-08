@@ -9,9 +9,9 @@ The goal of the project was to investigate the effectiveness of different visual
 * Dependencies
 * Setup Instructions
 * Usage Instructions
-* Key Functions
-* Data Sources
-* Troubleshooting
+* Other Functions
+* Data Source
+* Contact Info
 
 ## Features
 
@@ -39,7 +39,7 @@ time
 usgs
 statsmodels
 
-If need at the top of the code there is a commented section that will auto install the dependencies if on Linux.
+If needed, at the top of the code there is a commented section that will auto install the dependencies, if on Linux.
 
 ## Setup Instructions
 
@@ -54,8 +54,8 @@ ne_110m_admin_0_countries.shp
 
 ## Usage Instructions
 
-Once the repository is cloned or download the EQ_Analysis_Run.ipynb file can be access.  
-After accessing this file the code can be run by running each or all cell.  
+Once the repository is cloned or downloaded the EQ_Analysis_Run.ipynb file can be accessed.  
+After accessing this file the code can be run by running each or all cells.  
 The main() function contains multiple variables that can be edited by the user to customize the analysis.
 These variables are as follows:
 * city # Controls focal point of the analysis
