@@ -45,12 +45,12 @@ If need at the top of the code there is a commented section that will auto insta
 
 Clone the repository or code files to your local machine:
 
-git clone <repository-url>
+git clone https://github.com/BlueJCash/CS_5850_EQ_Project/
 
 Additionally, following shapefiles must be in the working directory. These datasets are necessary for choropleth mapping:
 
-ne_110m_admin_1_states_provinces.shp
-ne_110m_admin_0_countries.shp 
+ne_110m_admin_1_states_provinces.shp  
+ne_110m_admin_0_countries.shp  
 
 ## Usage Instructions
 
