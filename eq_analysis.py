@@ -16,6 +16,7 @@ Column names -- rather than positional indices into a numpy array -- are what
 keep latitude and longitude from being transposed downstream.
 """
 
+import re
 from functools import lru_cache
 
 import numpy as np
@@ -80,6 +81,10 @@ def fetch_events(city="Challis, ID", maxradius=1.0, starttime="1900-10-01",
     """Download earthquakes around ``city`` and return an ``events`` DataFrame.
 
     ``maxradius`` is in degrees, as the FDSN service expects.
+
+    The result size is bounded by the service itself: USGS refuses any query
+    matching more than 20,000 events, so a single fetch cannot return an
+    unbounded catalog no matter what the UI asks for.
     """
     lat, lon, _country = get_geolocation(city)
 
@@ -95,6 +100,24 @@ def fetch_events(city="Challis, ID", maxradius=1.0, starttime="1900-10-01",
             maxradius=maxradius,
         )
     except Exception as exc:
+        # USGS reports an over-large query as a plain HTTP 400, which is easy to
+        # mistake for "nothing matched" -- the opposite problem. Pull its own
+        # wording out so the user is told to narrow rather than widen.
+        detail = str(exc)
+        if "exceeds search limit" in detail:
+            counts = re.search(r"(\d+) matching events exceeds search limit of (\d+)",
+                               detail)
+            found, limit = counts.groups() if counts else ("too many", "20000")
+            raise AnalysisError(
+                f"This search matches {int(found):,} events, more than the "
+                f"{int(limit):,} USGS will return in one request. Narrow the "
+                f"search radius, shorten the date range, or raise the minimum "
+                f"magnitude."
+                if counts else
+                "This search matches more events than USGS will return at once. "
+                "Narrow the radius, date range, or magnitude range."
+            ) from exc
+
         # The FDSN client raises a bare exception for "no data matched" too.
         raise AnalysisError(
             f"No earthquakes found for {city} with these settings, or the USGS "
