@@ -1,0 +1,28 @@
+# Verified working on Python 3.14 (all available as prebuilt wheels).
+#   uv venv --python 3.14 .venv
+#   uv pip install -r requirements.txt
+
+# UI
+streamlit==1.59.2
+streamlit-folium==0.27.2
+plotly==6.9.0
+
+# Data retrieval
+obspy==1.5.0
+geopy==2.5.0
+
+# Analysis
+pandas==3.0.3
+numpy==2.5.1
+scipy==1.18.0
+scikit-learn==1.9.0
+statsmodels==0.14.6
+
+# Mapping and plotting
+matplotlib==3.11.1
+folium==0.20.0
+geopandas==1.1.4
+shapely==2.1.2
+
+# Notebook walkthrough only
+ipykernel==7.3.0
